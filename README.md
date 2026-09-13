@@ -74,3 +74,4 @@ pg_dump "$DATABASE_URL" -F c -f backup.dump
 ```bash
 pg_restore --clean --if-exists -d "$DATABASE_URL" backup.dump
 ```
+
