@@ -8,7 +8,7 @@ import {
   accounts,
   suppliers,
 } from "@/db/schema";
-import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { createAuditLog } from "@/lib/audit";
 import { createJournalEntry } from "@/lib/accounting";
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     const cardData = await db
       .select()
       .from(internetCards)
-      .where(sql`${internetCards.id} = ANY(${cardIds})`);
+      .where(inArray(internetCards.id, cardIds));
 
     const cardMap = new Map(cardData.map((c) => [c.id, c]));
 
