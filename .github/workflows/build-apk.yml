@@ -66,12 +66,27 @@ jobs:
           echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release with APK
+        id: release
         if: steps.build.outcome == 'success'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="apk-build-${{ github.run_number }}"
+          ls -la *.apk
           gh release create "$TAG" *.apk \
             --title "Android APK build #${{ github.run_number }}" \
             --notes "تطبيق أندرويد لنظام محاسبة كروت الإنترنت — تم بناؤه تلقائيًا." \
-            --repo "${{ github.repository }}"
+            --repo "${{ github.repository }}" 2>&1 | tee release-output.log
+
+      - name: Save release log on failure
+        if: steps.release.outcome == 'failure'
+        run: |
+          git config user.email "ci@local"
+          git config user.name "CI Bot"
+          mkdir -p logs
+          cp release-output.log "logs/release-${{ github.run_number }}.log"
+          git add logs/
+          git commit -m "CI: save failed release log #${{ github.run_number }}"
+          git push origin HEAD:main
+          exit 1
