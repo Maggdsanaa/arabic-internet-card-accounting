@@ -60,16 +60,10 @@ jobs:
         id: apk
         if: steps.build.outcome == 'success'
         run: |
-          APK_PATH=$(find . -maxdepth 2 -iname "*.apk" | head -1)
-          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          APK_PATH=$(find "$(pwd)" -maxdepth 2 -iname "*.apk" | head -1)
           echo "Found APK at: $APK_PATH"
-
-      - name: Upload APK artifact
-        if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: arabic-card-accounting-apk
-          path: ${{ steps.apk.outputs.path }}
+          ls -la "$(pwd)"/*.apk || true
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release with APK
         if: steps.build.outcome == 'success'
@@ -77,7 +71,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="apk-build-${{ github.run_number }}"
-          gh release create "$TAG" "${{ steps.apk.outputs.path }}" \
+          gh release create "$TAG" *.apk \
             --title "Android APK build #${{ github.run_number }}" \
             --notes "تطبيق أندرويد لنظام محاسبة كروت الإنترنت — تم بناؤه تلقائيًا." \
             --repo "${{ github.repository }}"
