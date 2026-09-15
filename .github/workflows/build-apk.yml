@@ -1,0 +1,60 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "twa-manifest.json"
+      - ".github/workflows/build-apk.yml"
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Restore signing keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
+
+      - name: Install Bubblewrap CLI
+        run: npm install -g @bubblewrap/cli
+
+      - name: Build signed APK
+        run: |
+          printf '%s\n%s\n' "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" | \
+          bubblewrap build --skipPwaValidation
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK_PATH=$(find . -maxdepth 2 -iname "*.apk" | head -1)
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found APK at: $APK_PATH"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arabic-card-accounting-apk
+          path: ${{ steps.apk.outputs.path }}
+
+      - name: Create GitHub Release with APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="apk-build-${{ github.run_number }}"
+          gh release create "$TAG" "${{ steps.apk.outputs.path }}" \
+            --title "Android APK build #${{ github.run_number }}" \
+            --notes "تطبيق أندرويد لنظام محاسبة كروت الإنترنت — تم بناؤه تلقائيًا." \
+            --repo "${{ github.repository }}"

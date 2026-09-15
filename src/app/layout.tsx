@@ -5,6 +5,12 @@ import ClientProviders from "./client-providers";
 export const metadata: Metadata = {
   title: "نظام المحاسبة - كروت الإنترنت",
   description: "نظام محاسبة متكامل لإدارة نشاط بيع كروت الإنترنت",
+  manifest: "/manifest.json",
+  themeColor: "#1e3a8a",
+  icons: {
+    icon: "/icon-512.png",
+    apple: "/icon-512.png",
+  },
 };
 
 export default function RootLayout({

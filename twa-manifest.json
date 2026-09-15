@@ -1,0 +1,40 @@
+{
+  "packageId": "com.maggdsanaa.arabiccardaccounting",
+  "host": "web-production-f7e5b2.up.railway.app",
+  "name": "نظام محاسبة كروت الإنترنت",
+  "launcherName": "محاسبة الكروت",
+  "display": "standalone",
+  "orientation": "default",
+  "themeColor": "#1e3a8a",
+  "navigationColor": "#1e3a8a",
+  "navigationColorDark": "#1e3a8a",
+  "navigationDividerColor": "#1e3a8a",
+  "navigationDividerColorDark": "#1e3a8a",
+  "backgroundColor": "#1e3a8a",
+  "enableNotifications": false,
+  "startUrl": "/login",
+  "iconUrl": "https://web-production-f7e5b2.up.railway.app/icon-512.png",
+  "maskableIconUrl": "https://web-production-f7e5b2.up.railway.app/icon-512.png",
+  "monochromeIconUrl": "https://web-production-f7e5b2.up.railway.app/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "arabic-accounting"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://web-production-f7e5b2.up.railway.app/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://web-production-f7e5b2.up.railway.app/",
+  "minSdkVersion": 21,
+  "protocolVersion": 2
+}
