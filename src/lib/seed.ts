@@ -88,21 +88,14 @@ export async function seedDatabase() {
 
   const insertedPartners = await db.insert(partners).values(partnersData).returning();
 
-  // Create users
+  // Create users — partners only. No admin/accountant accounts: every action
+  // that touches money or records requires the 3 partners, and each partner
+  // manages their own password after first login.
   const password1 = await hashPassword("Partner1@2024");
   const password2 = await hashPassword("Partner2@2024");
   const password3 = await hashPassword("Partner3@2024");
-  const adminPassword = await hashPassword("Admin@2024");
 
   await db.insert(users).values([
-    {
-      name: "المدير العام",
-      username: "admin",
-      passwordHash: adminPassword,
-      role: "admin",
-      partnerId: null,
-      isActive: true,
-    },
     {
       name: "الشريك الأول - أحمد",
       username: "partner1",
@@ -125,14 +118,6 @@ export async function seedDatabase() {
       passwordHash: password3,
       role: "partner",
       partnerId: insertedPartners[2].id,
-      isActive: true,
-    },
-    {
-      name: "المحاسب",
-      username: "accountant",
-      passwordHash: await hashPassword("Account@2024"),
-      role: "accountant",
-      partnerId: null,
       isActive: true,
     },
   ]);

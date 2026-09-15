@@ -20,7 +20,8 @@ const navItems = [
   { href: "/partners", label: "حسابات الشركاء", icon: "🤝" },
   { href: "/reports", label: "الأرباح والتقارير", icon: "📈" },
   { href: "/approvals", label: "طلبات الموافقة", icon: "✅" },
-  { href: "/audit-log", label: "سجل التدقيق", icon: "🔍", adminOnly: true },
+  { href: "/audit-log", label: "سجل التدقيق", icon: "🔍", partnerOnly: true },
+  { href: "/change-password", label: "تغيير كلمة المرور", icon: "🔑" },
 ];
 
 export default function Sidebar({
@@ -34,7 +35,7 @@ export default function Sidebar({
   const { user, logout } = useAuth();
 
   const filteredItems = navItems.filter(
-    (item) => !item.adminOnly || user?.role === "admin" || user?.role === "partner"
+    (item) => !item.partnerOnly || user?.role === "partner"
   );
 
   return (
@@ -71,13 +72,7 @@ export default function Sidebar({
         <div className="p-4 border-b border-blue-700">
           <p className="text-sm font-medium">{user?.name}</p>
           <p className="text-blue-300 text-xs">
-            {user?.role === "admin"
-              ? "مدير"
-              : user?.role === "partner"
-              ? "شريك"
-              : user?.role === "accountant"
-              ? "محاسب"
-              : "مشاهد"}
+            {user?.role === "partner" ? "شريك" : "مشاهد"}
           </p>
         </div>
 

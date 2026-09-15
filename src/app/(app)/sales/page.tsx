@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
+import DeleteReasonModal from "@/components/DeleteReasonModal";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface Sale {
@@ -52,6 +53,10 @@ export default function SalesPage() {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [voidTarget, setVoidTarget] = useState<Sale | null>(null);
+  const [voiding, setVoiding] = useState(false);
+  const [voidError, setVoidError] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -119,6 +124,29 @@ export default function SalesPage() {
     bank: "بنك",
   };
 
+  const handleVoid = async (reason: string) => {
+    if (!voidTarget) return;
+    setVoiding(true);
+    setVoidError("");
+    try {
+      const res = await fetch(`/api/sales/${voidTarget.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setVoidTarget(null);
+      setNotice(data.message || "تم إرسال طلب الإلغاء للموافقة");
+      setTimeout(() => setNotice(""), 6000);
+      load();
+    } catch (e) {
+      setVoidError(e instanceof Error ? e.message : "حدث خطأ");
+    } finally {
+      setVoiding(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -127,6 +155,12 @@ export default function SalesPage() {
           + فاتورة مبيعات
         </button>
       </div>
+
+      {notice && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 text-sm">
+          ℹ️ {notice}
+        </div>
+      )}
 
       <div className="card overflow-hidden p-0">
         <div className="overflow-x-auto">
@@ -141,13 +175,14 @@ export default function SalesPage() {
                 <th className="text-left py-3 px-4">المتبقي</th>
                 <th className="text-right py-3 px-4">طريقة الدفع</th>
                 <th className="text-right py-3 px-4">الحالة</th>
+                <th className="text-right py-3 px-4">الإجراءات</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400">جاري التحميل...</td></tr>
+                <tr><td colSpan={9} className="py-8 text-center text-gray-400">جاري التحميل...</td></tr>
               ) : sales.length === 0 ? (
-                <tr><td colSpan={8} className="py-8 text-center text-gray-400">لا توجد مبيعات</td></tr>
+                <tr><td colSpan={9} className="py-8 text-center text-gray-400">لا توجد مبيعات</td></tr>
               ) : (
                 sales.map((sale) => (
                   <tr key={sale.id} className={`table-row ${sale.isVoid ? "opacity-50" : ""}`}>
@@ -164,6 +199,11 @@ export default function SalesPage() {
                     </td>
                     <td className="py-3 px-4">
                       {sale.isVoid ? <span className="badge-danger">ملغى</span> : <span className="badge-success">نشط</span>}
+                    </td>
+                    <td className="py-3 px-4">
+                      {!sale.isVoid && (
+                        <button onClick={() => { setVoidTarget(sale); setVoidError(""); }} className="text-gray-400 hover:text-red-600">🗑️ إلغاء</button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -284,6 +324,15 @@ export default function SalesPage() {
           </div>
         </form>
       </Modal>
+
+      <DeleteReasonModal
+        open={!!voidTarget}
+        onClose={() => setVoidTarget(null)}
+        onConfirm={handleVoid}
+        itemLabel={voidTarget?.saleNumber || ""}
+        loading={voiding}
+        error={voidError}
+      />
     </div>
   );
 }

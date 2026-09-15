@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
+import DeleteReasonModal from "@/components/DeleteReasonModal";
 import { formatCurrency } from "@/lib/utils";
 
 interface Card {
@@ -42,9 +43,14 @@ export default function CardsPage() {
     sellingPrice: 0,
     quantity: 0,
     minQuantity: 5,
+    reason: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Card | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -68,6 +74,7 @@ export default function CardsPage() {
       sellingPrice: parseFloat(card.sellingPrice),
       quantity: card.quantity,
       minQuantity: card.minQuantity,
+      reason: "",
     });
     setShowAddModal(true);
   };
@@ -84,15 +91,43 @@ export default function CardsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error((await res.json()).error);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
       setShowAddModal(false);
       setEditCard(null);
-      setForm({ name: "", description: "", cardType: "monthly", durationDays: 30, speed: "", provider: "", purchasePrice: 0, sellingPrice: 0, quantity: 0, minQuantity: 5 });
+      setForm({ name: "", description: "", cardType: "monthly", durationDays: 30, speed: "", provider: "", purchasePrice: 0, sellingPrice: 0, quantity: 0, minQuantity: 5, reason: "" });
+      if (res.status === 202) {
+        setNotice(data.message || "تم إرسال الطلب للموافقة");
+        setTimeout(() => setNotice(""), 6000);
+      }
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "حدث خطأ");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (reason: string) => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/cards/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setDeleteTarget(null);
+      setNotice(data.message || "تم إرسال طلب الحذف للموافقة");
+      setTimeout(() => setNotice(""), 6000);
+      load();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "حدث خطأ");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -110,6 +145,12 @@ export default function CardsPage() {
           + إضافة كارت
         </button>
       </div>
+
+      {notice && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 text-sm">
+          ℹ️ {notice}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
@@ -130,7 +171,10 @@ export default function CardsPage() {
                       {card.provider && <span className="badge-info">{card.provider}</span>}
                     </div>
                   </div>
-                  <button onClick={() => openEdit(card)} className="text-gray-400 hover:text-blue-600">✏️</button>
+                  <div className="flex gap-2">
+                    <button onClick={() => openEdit(card)} className="text-gray-400 hover:text-blue-600">✏️</button>
+                    <button onClick={() => { setDeleteTarget(card); setDeleteError(""); }} className="text-gray-400 hover:text-red-600">🗑️</button>
+                  </div>
                 </div>
 
                 {card.speed && (
@@ -209,12 +253,29 @@ export default function CardsPage() {
               <input type="number" value={form.minQuantity} onChange={(e) => setForm({ ...form, minQuantity: parseInt(e.target.value) || 0 })} className="input-field" min="0" />
             </div>
           </div>
+          {editCard && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <label className="block text-sm font-medium text-amber-800 mb-1">
+                سبب التعديل * (سيُرسل الطلب لموافقة الشركاء الثلاثة قبل التنفيذ)
+              </label>
+              <textarea value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} className="input-field" rows={2} required />
+            </div>
+          )}
           <div className="flex gap-3 justify-end">
             <button type="button" onClick={() => { setShowAddModal(false); setEditCard(null); }} className="btn-secondary">إلغاء</button>
-            <button type="submit" disabled={saving} className="btn-primary">{saving ? "جاري الحفظ..." : "حفظ"}</button>
+            <button type="submit" disabled={saving} className="btn-primary">{saving ? "جاري الحفظ..." : editCard ? "إرسال طلب التعديل" : "حفظ"}</button>
           </div>
         </form>
       </Modal>
+
+      <DeleteReasonModal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        itemLabel={deleteTarget?.name || ""}
+        loading={deleting}
+        error={deleteError}
+      />
     </div>
   );
 }

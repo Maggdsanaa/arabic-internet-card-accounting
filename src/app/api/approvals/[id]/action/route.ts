@@ -5,6 +5,7 @@ import { approvalRequests, partners } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { createAuditLog } from "@/lib/audit";
+import { executeApprovedRequest } from "@/lib/approvalExecutor";
 
 const actionSchema = z.object({
   action: z.enum(["approve", "reject"]),
@@ -19,7 +20,7 @@ export async function POST(
     const user = await requireAuth();
 
     // Only partners can approve/reject
-    if (user.role !== "partner" && user.role !== "admin") {
+    if (user.role !== "partner") {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
@@ -147,6 +148,26 @@ export async function POST(
         .update(approvalRequests)
         .set({ status: "approved", executedAt: now, updatedAt: now })
         .where(eq(approvalRequests.id, requestId));
+
+      try {
+        await executeApprovedRequest(req2, user.id);
+      } catch (execError) {
+        console.error("Approval execution error:", execError);
+        await createAuditLog({
+          userId: user.id,
+          userName: user.name,
+          action: "execution_failed",
+          entityType: req2.entityType,
+          entityId: req2.entityId ?? undefined,
+          newData: {
+            error:
+              execError instanceof Error
+                ? execError.message
+                : String(execError),
+          },
+          approvalRequestId: requestId,
+        });
+      }
     } else if (anyRejected) {
       await db
         .update(approvalRequests)

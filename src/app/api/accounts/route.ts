@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth();
-    if (user.role !== "admin" && user.role !== "accountant") {
+    if (user.role !== "partner") {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 

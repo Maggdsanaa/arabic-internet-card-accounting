@@ -7,7 +7,7 @@ import { desc } from "drizzle-orm";
 export async function GET(req: NextRequest) {
   try {
     const user = await requireAuth();
-    if (user.role !== "admin" && user.role !== "partner") {
+    if (user.role !== "partner") {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 

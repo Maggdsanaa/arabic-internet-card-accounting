@@ -38,6 +38,12 @@ export default function PartnersPage() {
   const [loading, setLoading] = useState(true);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState<PartnerDetail | null>(null);
+  const [editTarget, setEditTarget] = useState<PartnerData | null>(null);
+  const [newName, setNewName] = useState("");
+  const [editReason, setEditReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -59,9 +65,46 @@ export default function PartnersPage() {
   const totalDrawings = partners.reduce((s, p) => s + p.drawingsBalance, 0);
   const totalNet = partners.reduce((s, p) => s + p.netCapital, 0);
 
+  const openRename = (p: PartnerData) => {
+    setEditTarget(p);
+    setNewName(p.name);
+    setEditReason("");
+    setEditError("");
+  };
+
+  const handleRename = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTarget) return;
+    setSaving(true);
+    setEditError("");
+    try {
+      const res = await fetch(`/api/partners/${editTarget.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName, reason: editReason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setEditTarget(null);
+      setNotice(data.message || "تم إرسال الطلب للموافقة");
+      setTimeout(() => setNotice(""), 6000);
+      load();
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : "حدث خطأ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">حسابات الشركاء</h1>
+
+      {notice && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 text-sm">
+          ℹ️ {notice}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-4">
@@ -100,7 +143,12 @@ export default function PartnersPage() {
               ) : (
                 partners.map((p) => (
                   <tr key={p.id} className="table-row">
-                    <td className="py-3 px-4 font-medium text-gray-800">{p.name}</td>
+                    <td className="py-3 px-4 font-medium text-gray-800">
+                      <div className="flex items-center gap-2">
+                        {p.name}
+                        <button onClick={() => openRename(p)} className="text-gray-400 hover:text-blue-600" title="تعديل الاسم">✏️</button>
+                      </div>
+                    </td>
                     <td className="py-3 px-4 text-gray-500">{p.phone}</td>
                     <td className="py-3 px-4">
                       <span className="badge-info">{p.sharePercentage}%</span>
@@ -208,6 +256,27 @@ export default function PartnersPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Rename Partner Modal */}
+      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title={`تعديل اسم: ${editTarget?.name}`}>
+        {editError && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">{editError}</div>}
+        <form onSubmit={handleRename} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">الاسم الجديد *</label>
+            <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} className="input-field" required />
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <label className="block text-sm font-medium text-amber-800 mb-1">
+              سبب التعديل * (سيُرسل الطلب لموافقة الشركاء الثلاثة قبل التنفيذ)
+            </label>
+            <textarea value={editReason} onChange={(e) => setEditReason(e.target.value)} className="input-field" rows={2} required />
+          </div>
+          <div className="flex gap-3 justify-end">
+            <button type="button" onClick={() => setEditTarget(null)} className="btn-secondary">إلغاء</button>
+            <button type="submit" disabled={saving} className="btn-primary">{saving ? "جاري الإرسال..." : "إرسال طلب التعديل"}</button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
+import DeleteReasonModal from "@/components/DeleteReasonModal";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface Customer {
@@ -10,7 +11,9 @@ interface Customer {
   name: string;
   phone: string;
   email: string;
+  address?: string;
   creditLimit: string;
+  notes?: string;
   createdAt: string;
 }
 
@@ -34,6 +37,11 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [statement, setStatement] = useState<Statement[]>([]);
   const [statBalance, setStatBalance] = useState(0);
+  const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [notice, setNotice] = useState("");
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -42,6 +50,7 @@ export default function CustomersPage() {
     creditLimit: 0,
     notes: "",
     openingBalance: 0,
+    reason: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -64,27 +73,76 @@ export default function CustomersPage() {
     loadCustomers(search);
   };
 
-  const handleAddSubmit = async (e: React.FormEvent) => {
+  const openAdd = () => {
+    setEditCustomer(null);
+    setForm({ name: "", phone: "", email: "", address: "", creditLimit: 0, notes: "", openingBalance: 0, reason: "" });
+    setShowAddModal(true);
+  };
+
+  const openEdit = (customer: Customer) => {
+    setEditCustomer(customer);
+    setForm({
+      name: customer.name,
+      phone: customer.phone || "",
+      email: customer.email || "",
+      address: customer.address || "",
+      creditLimit: parseFloat(customer.creditLimit) || 0,
+      notes: customer.notes || "",
+      openingBalance: 0,
+      reason: "",
+    });
+    setShowAddModal(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError("");
     try {
-      const res = await fetch("/api/customers", {
-        method: "POST",
+      const url = editCustomer ? `/api/customers/${editCustomer.id}` : "/api/customers";
+      const method = editCustomer ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error);
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
       setShowAddModal(false);
-      setForm({ name: "", phone: "", email: "", address: "", creditLimit: 0, notes: "", openingBalance: 0 });
+      setEditCustomer(null);
+      setForm({ name: "", phone: "", email: "", address: "", creditLimit: 0, notes: "", openingBalance: 0, reason: "" });
+      if (res.status === 202) {
+        setNotice(data.message || "تم إرسال الطلب للموافقة");
+        setTimeout(() => setNotice(""), 6000);
+      }
       loadCustomers();
     } catch (e) {
       setError(e instanceof Error ? e.message : "حدث خطأ");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (reason: string) => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/customers/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setDeleteTarget(null);
+      setNotice(data.message || "تم إرسال طلب الحذف للموافقة");
+      setTimeout(() => setNotice(""), 6000);
+      loadCustomers();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "حدث خطأ");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -101,10 +159,16 @@ export default function CustomersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">العملاء</h1>
-        <button onClick={() => setShowAddModal(true)} className="btn-primary">
+        <button onClick={openAdd} className="btn-primary">
           + إضافة عميل
         </button>
       </div>
+
+      {notice && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 text-sm">
+          ℹ️ {notice}
+        </div>
+      )}
 
       {/* Search */}
       <div className="card">
@@ -161,12 +225,16 @@ export default function CustomersPage() {
                     </td>
                     <td className="py-3 px-4 text-gray-500">{formatDate(customer.createdAt)}</td>
                     <td className="py-3 px-4">
-                      <button
-                        onClick={() => openStatement(customer)}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                      >
-                        كشف حساب
-                      </button>
+                      <div className="flex gap-3 items-center">
+                        <button
+                          onClick={() => openStatement(customer)}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        >
+                          كشف حساب
+                        </button>
+                        <button onClick={() => openEdit(customer)} className="text-gray-400 hover:text-blue-600">✏️</button>
+                        <button onClick={() => { setDeleteTarget(customer); setDeleteError(""); }} className="text-gray-400 hover:text-red-600">🗑️</button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -176,14 +244,14 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Add Customer Modal */}
-      <Modal open={showAddModal} onClose={() => setShowAddModal(false)} title="إضافة عميل جديد">
+      {/* Add/Edit Customer Modal */}
+      <Modal open={showAddModal} onClose={() => { setShowAddModal(false); setEditCustomer(null); }} title={editCustomer ? "تعديل عميل" : "إضافة عميل جديد"}>
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">
             {error}
           </div>
         )}
-        <form onSubmit={handleAddSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -245,18 +313,20 @@ export default function CustomersPage() {
               className="input-field"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              الرصيد الافتتاحي (ريال)
-            </label>
-            <input
-              type="number"
-              value={form.openingBalance}
-              onChange={(e) => setForm({ ...form, openingBalance: parseFloat(e.target.value) || 0 })}
-              className="input-field"
-              min="0"
-            />
-          </div>
+          {!editCustomer && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                الرصيد الافتتاحي (ريال)
+              </label>
+              <input
+                type="number"
+                value={form.openingBalance}
+                onChange={(e) => setForm({ ...form, openingBalance: parseFloat(e.target.value) || 0 })}
+                className="input-field"
+                min="0"
+              />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               ملاحظات
@@ -268,12 +338,20 @@ export default function CustomersPage() {
               rows={2}
             />
           </div>
+          {editCustomer && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <label className="block text-sm font-medium text-amber-800 mb-1">
+                سبب التعديل * (سيُرسل الطلب لموافقة الشركاء الثلاثة قبل التنفيذ)
+              </label>
+              <textarea value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} className="input-field" rows={2} required />
+            </div>
+          )}
           <div className="flex gap-3 justify-end">
-            <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary">
+            <button type="button" onClick={() => { setShowAddModal(false); setEditCustomer(null); }} className="btn-secondary">
               إلغاء
             </button>
             <button type="submit" disabled={saving} className="btn-primary">
-              {saving ? "جاري الحفظ..." : "حفظ"}
+              {saving ? "جاري الحفظ..." : editCustomer ? "إرسال طلب التعديل" : "حفظ"}
             </button>
           </div>
         </form>
@@ -339,6 +417,15 @@ export default function CustomersPage() {
           </button>
         </div>
       </Modal>
+
+      <DeleteReasonModal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        itemLabel={deleteTarget?.name || ""}
+        loading={deleting}
+        error={deleteError}
+      />
     </div>
   );
 }

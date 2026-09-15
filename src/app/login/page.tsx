@@ -60,7 +60,7 @@ export default function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="input-field"
-                placeholder="admin"
+                placeholder="partner1"
                 required
                 autoComplete="username"
               />
@@ -95,7 +95,6 @@ export default function LoginPage() {
             <p className="text-xs text-gray-500 mb-3 text-center">حسابات تجريبية:</p>
             <div className="grid grid-cols-2 gap-2 text-xs">
               {[
-                { u: "admin", p: "Admin@2024", l: "المدير" },
                 { u: "partner1", p: "Partner1@2024", l: "الشريك 1" },
                 { u: "partner2", p: "Partner2@2024", l: "الشريك 2" },
                 { u: "partner3", p: "Partner3@2024", l: "الشريك 3" },
