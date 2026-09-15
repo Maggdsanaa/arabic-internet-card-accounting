@@ -7,6 +7,9 @@ on:
       - "twa-manifest.json"
       - ".github/workflows/build-apk.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -32,24 +35,44 @@ jobs:
         run: npm install -g @bubblewrap/cli
 
       - name: Build signed APK
+        id: build
+        continue-on-error: true
         run: |
           printf '%s\n%s\n' "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" | \
-          bubblewrap build --skipPwaValidation
+          bubblewrap build --skipPwaValidation 2>&1 | tee build-output.log
+
+      - name: Save build log on failure
+        if: steps.build.outcome == 'failure'
+        run: |
+          git config user.email "ci@local"
+          git config user.name "CI Bot"
+          mkdir -p logs
+          cp build-output.log "logs/build-${{ github.run_number }}.log"
+          git add logs/
+          git commit -m "CI: save failed build log #${{ github.run_number }}"
+          git push origin HEAD:main
+
+      - name: Fail job if build failed
+        if: steps.build.outcome == 'failure'
+        run: exit 1
 
       - name: Locate APK
         id: apk
+        if: steps.build.outcome == 'success'
         run: |
           APK_PATH=$(find . -maxdepth 2 -iname "*.apk" | head -1)
           echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
           echo "Found APK at: $APK_PATH"
 
       - name: Upload APK artifact
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: arabic-card-accounting-apk
           path: ${{ steps.apk.outputs.path }}
 
       - name: Create GitHub Release with APK
+        if: steps.build.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
