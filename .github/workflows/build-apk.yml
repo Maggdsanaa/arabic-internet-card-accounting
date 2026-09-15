@@ -60,10 +60,13 @@ jobs:
         id: apk
         if: steps.build.outcome == 'success'
         run: |
-          APK_PATH=$(find "$(pwd)" -maxdepth 2 -iname "*.apk" | head -1)
+          APK_PATH=$(find "$(pwd)" -maxdepth 4 -iname "*.apk" | head -1)
           echo "Found APK at: $APK_PATH"
-          ls -la "$(pwd)"/*.apk || true
-          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          if [ -z "$APK_PATH" ]; then
+            echo "NO APK FOUND"; find "$(pwd)" -maxdepth 4 -type f | tee find-output.log; exit 1
+          fi
+          cp "$APK_PATH" ./release-signed.apk
+          ls -la ./release-signed.apk
 
       - name: Create GitHub Release with APK
         id: release
@@ -72,12 +75,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set +e
           TAG="apk-build-${{ github.run_number }}"
-          ls -la *.apk
-          gh release create "$TAG" *.apk \
+          ls -la ./release-signed.apk
+          gh release create "$TAG" ./release-signed.apk \
             --title "Android APK build #${{ github.run_number }}" \
             --notes "تطبيق أندرويد لنظام محاسبة كروت الإنترنت — تم بناؤه تلقائيًا." \
-            --repo "${{ github.repository }}" 2>&1 | tee release-output.log
+            --repo "${{ github.repository }}" > release-output.log 2>&1
+          RC=$?
+          cat release-output.log
+          exit $RC
 
       - name: Save release log on failure
         if: steps.release.outcome == 'failure'
@@ -85,7 +92,7 @@ jobs:
           git config user.email "ci@local"
           git config user.name "CI Bot"
           mkdir -p logs
-          cp release-output.log "logs/release-${{ github.run_number }}.log"
+          cp release-output.log "logs/release-${{ github.run_number }}.log" 2>/dev/null || echo "no release-output.log" > "logs/release-${{ github.run_number }}.log"
           git add logs/
           git commit -m "CI: save failed release log #${{ github.run_number }}"
           git pull --rebase origin main && git push origin HEAD:main
