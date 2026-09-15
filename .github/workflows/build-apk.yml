@@ -23,140 +23,88 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Set up Android SDK
-        id: sdk
-        continue-on-error: true
-        run: |
-          set -e
-          export ANDROID_HOME="$HOME/android-sdk"
-          mkdir -p "$ANDROID_HOME/cmdline-tools"
-          cd "$ANDROID_HOME/cmdline-tools"
-          curl -f -s -o cmdline-tools.zip https://dl.google.com/android/repo/commandlinetools-linux-11076708_latest.zip
-          unzip -q cmdline-tools.zip
-          mv cmdline-tools latest
-          rm cmdline-tools.zip
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-          ls "$ANDROID_HOME"
-
-      - name: Save SDK setup log on failure
-        if: steps.sdk.outcome == 'failure'
-        run: |
-          git config user.email "ci@local"
-          git config user.name "CI Bot"
-          mkdir -p logs
-          echo "SDK setup failed. HOME=$HOME" > "logs/sdk-${{ github.run_number }}.log"
-          ls -la "$HOME/android-sdk/cmdline-tools" >> "logs/sdk-${{ github.run_number }}.log" 2>&1 || true
-          curl -sI https://dl.google.com/android/repo/commandlinetools-linux-11076708_latest.zip >> "logs/sdk-${{ github.run_number }}.log" 2>&1 || true
-          git add logs/
-          git commit -m "CI: save sdk setup debug log #${{ github.run_number }}"
-          git pull --rebase origin main && git push origin HEAD:main
-          exit 1
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Restore signing keystore
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
-
-      - name: Install Bubblewrap CLI
-        run: npm install -g @bubblewrap/cli
-
-      - name: Pre-configure Bubblewrap (skip interactive wizard)
+      - name: Everything (SDK + Bubblewrap + Build), fully logged
+        id: everything
+        continue-on-error: true
         run: |
+          exec > >(tee full-output.log) 2>&1
+          set -x
+
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
+
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          cd "$ANDROID_HOME/cmdline-tools"
+          curl -f -sS -o cmdline-tools.zip https://dl.google.com/android/repo/commandlinetools-linux-11076708_latest.zip
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools latest
+          rm cmdline-tools.zip
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+          cd "$GITHUB_WORKSPACE"
+          npm install -g @bubblewrap/cli
+
           mkdir -p ~/.bubblewrap
-          cat > ~/.bubblewrap/config.json << EOF
+          cat > ~/.bubblewrap/config.json << CFGEOF
           {
             "jdkPath": "${JAVA_HOME}",
             "androidSdkPath": "${ANDROID_HOME}"
           }
-          EOF
-          cat ~/.bubblewrap/config.json
+          CFGEOF
 
-      - name: Build signed APK
-        id: build
-        if: steps.sdk.outcome == 'success'
-        continue-on-error: true
-        run: |
-          set +e
-          printf '%s\n%s\n' "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" > pw.txt
-          bubblewrap build --skipPwaValidation < pw.txt > build-output.log 2>&1
-          RC=$?
-          tail -150 build-output.log
-          exit $RC
+          printf '%s\n%s\n' "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" | \
+            bubblewrap build --skipPwaValidation
 
-      - name: Save build log on failure
-        if: steps.build.outcome == 'failure'
-        run: |
-          git config user.email "ci@local"
-          git config user.name "CI Bot"
-          mkdir -p logs
-          cp build-output.log "logs/build-${{ github.run_number }}.log"
-          git add logs/
-          git commit -m "CI: save failed build log #${{ github.run_number }}"
-          git pull --rebase origin main && git push origin HEAD:main
-          exit 1
-
-      - name: Locate APK
-        id: apk
-        if: steps.build.outcome == 'success'
-        continue-on-error: true
-        run: |
-          APK_PATH=$(find "$(pwd)" -iname "*.apk" 2>/dev/null | head -1)
-          echo "Found APK at: $APK_PATH"
-          if [ -z "$APK_PATH" ]; then
-            find "$(pwd)" -maxdepth 6 -type f > find-output.log 2>&1
-            exit 1
+          APK_PATH=$(find "$GITHUB_WORKSPACE" -iname "*.apk" 2>/dev/null | head -1)
+          echo "RESOLVED_APK_PATH=$APK_PATH"
+          if [ -n "$APK_PATH" ]; then
+            cp "$APK_PATH" "$GITHUB_WORKSPACE/release-signed.apk"
           fi
-          cp "$APK_PATH" ./release-signed.apk
-          ls -la ./release-signed.apk
 
-      - name: Save debug info if APK not found
-        if: steps.apk.outcome == 'failure'
+      - name: Save full log to repo (always)
+        if: always()
         run: |
           git config user.email "ci@local"
           git config user.name "CI Bot"
           mkdir -p logs
-          echo "=== find output ===" > "logs/locate-${{ github.run_number }}.log"
-          cat find-output.log >> "logs/locate-${{ github.run_number }}.log" 2>/dev/null
-          echo "=== build output tail ===" >> "logs/locate-${{ github.run_number }}.log"
-          tail -150 build-output.log >> "logs/locate-${{ github.run_number }}.log" 2>/dev/null
+          cp full-output.log "logs/full-${{ github.run_number }}.log" 2>/dev/null || echo "no log produced" > "logs/full-${{ github.run_number }}.log"
           git add logs/
-          git commit -m "CI: save locate-apk debug log #${{ github.run_number }}"
-          git pull --rebase origin main && git push origin HEAD:main
-          exit 1
+          git commit -m "CI: save full build log #${{ github.run_number }}" || echo "nothing to commit"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && break
+            echo "retry push $i"
+            sleep 5
+          done
+
+      - name: Check APK was produced
+        id: check
+        run: |
+          if [ -f "release-signed.apk" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Create GitHub Release with APK
-        id: release
-        if: steps.build.outcome == 'success' && steps.apk.outcome == 'success'
-        continue-on-error: true
+        if: steps.check.outputs.found == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set +e
           TAG="apk-build-${{ github.run_number }}"
           gh release create "$TAG" ./release-signed.apk \
             --title "Android APK build #${{ github.run_number }}" \
             --notes "تطبيق أندرويد لنظام محاسبة كروت الإنترنت — تم بناؤه تلقائيًا." \
-            --repo "${{ github.repository }}" > release-output.log 2>&1
-          RC=$?
-          cat release-output.log
-          exit $RC
+            --repo "${{ github.repository }}"
 
-      - name: Save release log on failure
-        if: steps.release.outcome == 'failure'
+      - name: Fail job if no APK
+        if: steps.check.outputs.found == 'false'
         run: |
-          git config user.email "ci@local"
-          git config user.name "CI Bot"
-          mkdir -p logs
-          cp release-output.log "logs/release-${{ github.run_number }}.log" 2>/dev/null || echo "no release-output.log" > "logs/release-${{ github.run_number }}.log"
-          git add logs/
-          git commit -m "CI: save failed release log #${{ github.run_number }}"
-          git pull --rebase origin main && git push origin HEAD:main
+          echo "Build did not produce an APK. See logs/full-${{ github.run_number }}.log in the repo."
           exit 1
