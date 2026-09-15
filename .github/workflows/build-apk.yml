@@ -24,7 +24,38 @@ jobs:
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        id: sdk
+        continue-on-error: true
+        run: |
+          set -e
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          cd "$ANDROID_HOME/cmdline-tools"
+          curl -f -s -o cmdline-tools.zip https://dl.google.com/android/repo/commandlinetools-linux-11076708_latest.zip
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools latest
+          rm cmdline-tools.zip
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          ls "$ANDROID_HOME"
+
+      - name: Save SDK setup log on failure
+        if: steps.sdk.outcome == 'failure'
+        run: |
+          git config user.email "ci@local"
+          git config user.name "CI Bot"
+          mkdir -p logs
+          echo "SDK setup failed. HOME=$HOME" > "logs/sdk-${{ github.run_number }}.log"
+          ls -la "$HOME/android-sdk/cmdline-tools" >> "logs/sdk-${{ github.run_number }}.log" 2>&1 || true
+          curl -sI https://dl.google.com/android/repo/commandlinetools-linux-11076708_latest.zip >> "logs/sdk-${{ github.run_number }}.log" 2>&1 || true
+          git add logs/
+          git commit -m "CI: save sdk setup debug log #${{ github.run_number }}"
+          git pull --rebase origin main && git push origin HEAD:main
+          exit 1
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -50,6 +81,7 @@ jobs:
 
       - name: Build signed APK
         id: build
+        if: steps.sdk.outcome == 'success'
         continue-on-error: true
         run: |
           set +e
