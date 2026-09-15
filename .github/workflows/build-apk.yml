@@ -59,18 +59,36 @@ jobs:
       - name: Locate APK
         id: apk
         if: steps.build.outcome == 'success'
+        continue-on-error: true
         run: |
-          APK_PATH=$(find "$(pwd)" -maxdepth 4 -iname "*.apk" | head -1)
+          APK_PATH=$(find "$(pwd)" -iname "*.apk" 2>/dev/null | head -1)
           echo "Found APK at: $APK_PATH"
+          find "$(pwd)" -maxdepth 6 -type f > find-output.log 2>&1
           if [ -z "$APK_PATH" ]; then
-            echo "NO APK FOUND"; find "$(pwd)" -maxdepth 4 -type f | tee find-output.log; exit 1
+            echo "NO APK FOUND"
+            exit 1
           fi
           cp "$APK_PATH" ./release-signed.apk
           ls -la ./release-signed.apk
 
+      - name: Save debug info if APK not found
+        if: steps.apk.outcome == 'failure'
+        run: |
+          git config user.email "ci@local"
+          git config user.name "CI Bot"
+          mkdir -p logs
+          echo "=== find output ===" > "logs/locate-${{ github.run_number }}.log"
+          cat find-output.log >> "logs/locate-${{ github.run_number }}.log" 2>/dev/null || echo "no find-output.log" >> "logs/locate-${{ github.run_number }}.log"
+          echo "=== build output tail ===" >> "logs/locate-${{ github.run_number }}.log"
+          tail -100 build-output.log >> "logs/locate-${{ github.run_number }}.log" 2>/dev/null
+          git add logs/
+          git commit -m "CI: save locate-apk debug log #${{ github.run_number }}"
+          git pull --rebase origin main && git push origin HEAD:main
+          exit 1
+
       - name: Create GitHub Release with APK
         id: release
-        if: steps.build.outcome == 'success'
+        if: steps.build.outcome == 'success' && steps.apk.outcome == 'success'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
