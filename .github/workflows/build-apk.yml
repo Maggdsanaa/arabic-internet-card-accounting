@@ -23,6 +23,9 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -34,12 +37,27 @@ jobs:
       - name: Install Bubblewrap CLI
         run: npm install -g @bubblewrap/cli
 
+      - name: Pre-configure Bubblewrap (skip interactive wizard)
+        run: |
+          mkdir -p ~/.bubblewrap
+          cat > ~/.bubblewrap/config.json << EOF
+          {
+            "jdkPath": "${JAVA_HOME}",
+            "androidSdkPath": "${ANDROID_HOME}"
+          }
+          EOF
+          cat ~/.bubblewrap/config.json
+
       - name: Build signed APK
         id: build
         continue-on-error: true
         run: |
-          printf '%s\n%s\n' "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" | \
-          bubblewrap build --skipPwaValidation 2>&1 | tee build-output.log
+          set +e
+          printf '%s\n%s\n' "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" > pw.txt
+          bubblewrap build --skipPwaValidation < pw.txt > build-output.log 2>&1
+          RC=$?
+          tail -150 build-output.log
+          exit $RC
 
       - name: Save build log on failure
         if: steps.build.outcome == 'failure'
@@ -51,10 +69,7 @@ jobs:
           git add logs/
           git commit -m "CI: save failed build log #${{ github.run_number }}"
           git pull --rebase origin main && git push origin HEAD:main
-
-      - name: Fail job if build failed
-        if: steps.build.outcome == 'failure'
-        run: exit 1
+          exit 1
 
       - name: Locate APK
         id: apk
@@ -63,9 +78,8 @@ jobs:
         run: |
           APK_PATH=$(find "$(pwd)" -iname "*.apk" 2>/dev/null | head -1)
           echo "Found APK at: $APK_PATH"
-          find "$(pwd)" -maxdepth 6 -type f > find-output.log 2>&1
           if [ -z "$APK_PATH" ]; then
-            echo "NO APK FOUND"
+            find "$(pwd)" -maxdepth 6 -type f > find-output.log 2>&1
             exit 1
           fi
           cp "$APK_PATH" ./release-signed.apk
@@ -78,9 +92,9 @@ jobs:
           git config user.name "CI Bot"
           mkdir -p logs
           echo "=== find output ===" > "logs/locate-${{ github.run_number }}.log"
-          cat find-output.log >> "logs/locate-${{ github.run_number }}.log" 2>/dev/null || echo "no find-output.log" >> "logs/locate-${{ github.run_number }}.log"
+          cat find-output.log >> "logs/locate-${{ github.run_number }}.log" 2>/dev/null
           echo "=== build output tail ===" >> "logs/locate-${{ github.run_number }}.log"
-          tail -100 build-output.log >> "logs/locate-${{ github.run_number }}.log" 2>/dev/null
+          tail -150 build-output.log >> "logs/locate-${{ github.run_number }}.log" 2>/dev/null
           git add logs/
           git commit -m "CI: save locate-apk debug log #${{ github.run_number }}"
           git pull --rebase origin main && git push origin HEAD:main
@@ -95,7 +109,6 @@ jobs:
         run: |
           set +e
           TAG="apk-build-${{ github.run_number }}"
-          ls -la ./release-signed.apk
           gh release create "$TAG" ./release-signed.apk \
             --title "Android APK build #${{ github.run_number }}" \
             --notes "تطبيق أندرويد لنظام محاسبة كروت الإنترنت — تم بناؤه تلقائيًا." \
