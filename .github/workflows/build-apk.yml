@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "twa-manifest.json"
+      - "android/**"
       - ".github/workflows/build-apk.yml"
 
 permissions:
@@ -23,99 +23,64 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Everything (SDK + Bubblewrap + Build), fully logged
-        id: everything
-        continue-on-error: true
+      - name: Set up Android SDK
         run: |
-          exec > >(tee full-output.log) 2>&1
-
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
-
           export ANDROID_HOME="$HOME/android-sdk"
           mkdir -p "$ANDROID_HOME/cmdline-tools"
           cd "$ANDROID_HOME/cmdline-tools"
-          curl -f -sS -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
+          curl -fsSL -o cmdline-tools.zip \
+            https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
           unzip -q cmdline-tools.zip
           mv cmdline-tools latest
           rm cmdline-tools.zip
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "build-tools;36.1.0"
-          ln -s "$ANDROID_HOME/cmdline-tools/latest/bin" "$ANDROID_HOME/bin"
-          ln -s "$ANDROID_HOME/cmdline-tools/latest/lib" "$ANDROID_HOME/lib"
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
 
-          cd "$GITHUB_WORKSPACE"
-          npm install -g @bubblewrap/cli
+      - name: Restore signing keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
 
-          mkdir -p ~/.bubblewrap
-          cat > ~/.bubblewrap/config.json << CFGEOF
-          {
-            "jdkPath": "${JAVA_HOME}",
-            "androidSdkPath": "${ANDROID_HOME}"
-          }
-          CFGEOF
-          echo "=== bubblewrap config ==="
-          cat ~/.bubblewrap/config.json
-          echo "=== ANDROID_HOME contents ==="
-          ls -la "$ANDROID_HOME"
-          echo "=== ANDROID_HOME/licenses ==="
-          ls -la "$ANDROID_HOME/licenses" || echo "no licenses dir"
-          echo "=== JAVA_HOME ==="
-          echo "$JAVA_HOME"
-          ls -la "$JAVA_HOME/bin" | head -5
+      - name: Build signed APK with Gradle
+        working-directory: android
+        env:
+          KEYSTORE_PATH: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: arabic-accounting
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace 2>&1 | tee ../build-output.log
+          echo "=== APK files found ==="
+          find . -name "*.apk" | tee -a ../build-output.log
 
-          export BUBBLEWRAP_KEYSTORE_PASSWORD="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
-          export BUBBLEWRAP_KEY_PASSWORD="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
-          echo "y" | bubblewrap build --skipPwaValidation
+      - name: Copy signed APK
+        run: |
+          APK=$(find android -name "*.apk" | head -1)
+          echo "APK found: $APK"
+          cp "$APK" release-signed.apk
 
-          APK_PATH=$(find "$GITHUB_WORKSPACE" -iname "*.apk" 2>/dev/null | head -1)
-          echo "RESOLVED_APK_PATH=$APK_PATH"
-          if [ -n "$APK_PATH" ]; then
-            cp "$APK_PATH" "$GITHUB_WORKSPACE/release-signed.apk"
-          fi
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="apk-v${{ github.run_number }}"
+          gh release create "$TAG" ./release-signed.apk \
+            --title "نظام محاسبة كروت الإنترنت — APK #${{ github.run_number }}" \
+            --notes "ثبّت هذا الملف على جهاز أندرويد: اضغط عليه ثم اختر تثبيت." \
+            --repo "${{ github.repository }}"
 
-      - name: Save full log to repo (always)
-        if: always()
+      - name: Save log on failure
+        if: failure()
         run: |
           git config user.email "ci@local"
           git config user.name "CI Bot"
           mkdir -p logs
-          cp full-output.log "logs/full-${{ github.run_number }}.log" 2>/dev/null || echo "no log produced" > "logs/full-${{ github.run_number }}.log"
+          cp build-output.log "logs/gradle-${{ github.run_number }}.log" 2>/dev/null || true
           git add logs/
-          git commit -m "CI: save full build log #${{ github.run_number }}" || echo "nothing to commit"
+          git diff --cached --quiet || git commit -m "CI: save gradle log #${{ github.run_number }}"
           for i in 1 2 3; do
-            git pull --rebase origin main && git push origin HEAD:main && break
-            echo "retry push $i"
-            sleep 5
+            git pull --rebase origin main && git push origin HEAD:main && break || sleep 5
           done
-
-      - name: Check APK was produced
-        id: check
-        run: |
-          if [ -f "release-signed.apk" ]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create GitHub Release with APK
-        if: steps.check.outputs.found == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="apk-build-${{ github.run_number }}"
-          gh release create "$TAG" ./release-signed.apk \
-            --title "Android APK build #${{ github.run_number }}" \
-            --notes "تطبيق أندرويد لنظام محاسبة كروت الإنترنت — تم بناؤه تلقائيًا." \
-            --repo "${{ github.repository }}"
-
-      - name: Fail job if no APK
-        if: steps.check.outputs.found == 'false'
-        run: |
-          echo "Build did not produce an APK. See logs/full-${{ github.run_number }}.log in the repo."
-          exit 1
