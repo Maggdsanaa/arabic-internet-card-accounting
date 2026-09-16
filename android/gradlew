@@ -1,15 +1,20 @@
-#!/bin/sh
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+#!/usr/bin/env sh
+##############################################################################
+## Gradle start up script for UN*X
+##############################################################################
+APP_HOME="$(cd "$(dirname "$0")" && pwd)"
 GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
-DIST_URL="https://services.gradle.org/distributions/gradle-8.6-bin.zip"
-DIST_ZIP="$GRADLE_USER_HOME/wrapper/dists/gradle-8.6-bin/gradle-8.6-bin.zip"
-DIST_DIR="$GRADLE_USER_HOME/wrapper/dists/gradle-8.6-bin"
+GRADLE_WRAPPER_DIR="$GRADLE_USER_HOME/wrapper/dists/gradle-8.6-bin"
+GRADLE_ZIP="$GRADLE_WRAPPER_DIR.zip"
+GRADLE_HOME="$GRADLE_WRAPPER_DIR/gradle-8.6"
 
-if [ ! -f "$DIST_DIR/gradle-8.6/bin/gradle" ]; then
-  mkdir -p "$DIST_DIR"
+if [ ! -f "$GRADLE_HOME/bin/gradle" ]; then
   echo "Downloading Gradle 8.6..."
-  curl -fsSL -o "$DIST_ZIP" "$DIST_URL"
-  cd "$DIST_DIR" && unzip -q "$DIST_ZIP" && rm "$DIST_ZIP"
+  mkdir -p "$GRADLE_WRAPPER_DIR"
+  curl -fsSL -o "$GRADLE_ZIP" \
+    "https://services.gradle.org/distributions/gradle-8.6-bin.zip"
+  unzip -q -d "$GRADLE_WRAPPER_DIR" "$GRADLE_ZIP"
+  rm -f "$GRADLE_ZIP"
 fi
 
-exec "$DIST_DIR/gradle-8.6/bin/gradle" "$@"
+exec "$GRADLE_HOME/bin/gradle" -p "$APP_HOME" "$@"
