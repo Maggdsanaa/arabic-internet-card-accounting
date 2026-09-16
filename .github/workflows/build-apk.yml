@@ -33,14 +33,13 @@ jobs:
         continue-on-error: true
         run: |
           exec > >(tee full-output.log) 2>&1
-          set -x
 
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android.keystore
 
           export ANDROID_HOME="$HOME/android-sdk"
           mkdir -p "$ANDROID_HOME/cmdline-tools"
           cd "$ANDROID_HOME/cmdline-tools"
-          curl -f -sS -o cmdline-tools.zip https://dl.google.com/android/repo/commandlinetools-linux-11076708_latest.zip
+          curl -f -sS -o cmdline-tools.zip https://dl.google.com/android/repo/commandlinetools-linux-15859902_latest.zip
           unzip -q cmdline-tools.zip
           mv cmdline-tools latest
           rm cmdline-tools.zip
