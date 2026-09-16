@@ -57,6 +57,15 @@ jobs:
             "androidSdkPath": "${ANDROID_HOME}"
           }
           CFGEOF
+          echo "=== bubblewrap config ==="
+          cat ~/.bubblewrap/config.json
+          echo "=== ANDROID_HOME contents ==="
+          ls -la "$ANDROID_HOME"
+          echo "=== ANDROID_HOME/licenses ==="
+          ls -la "$ANDROID_HOME/licenses" || echo "no licenses dir"
+          echo "=== JAVA_HOME ==="
+          echo "$JAVA_HOME"
+          ls -la "$JAVA_HOME/bin" | head -5
 
           printf '%s\n%s\n' "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" | \
             bubblewrap build --skipPwaValidation
