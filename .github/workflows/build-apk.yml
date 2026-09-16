@@ -58,9 +58,14 @@ jobs:
 
       - name: Copy signed APK
         run: |
-          APK=$(find android -name "*.apk" | head -1)
-          echo "APK found: $APK"
+          APK=$(find android/app/build -name "*.apk" 2>/dev/null | head -1)
+          echo "APK found at: $APK"
+          if [ -z "$APK" ]; then
+            echo "No APK found. Directory listing:"; find android/app/build -type f 2>/dev/null || echo "build dir missing"
+            exit 1
+          fi
           cp "$APK" release-signed.apk
+          ls -la release-signed.apk
 
       - name: Create GitHub Release
         env:
