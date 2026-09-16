@@ -69,7 +69,7 @@ jobs:
           echo "$JAVA_HOME"
           ls -la "$JAVA_HOME/bin" | head -5
 
-          printf '%s\n%s\n' "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" | \
+          printf 'y\n%s\n%s\n' "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" | \
             bubblewrap build --skipPwaValidation
 
           APK_PATH=$(find "$GITHUB_WORKSPACE" -iname "*.apk" 2>/dev/null | head -1)
