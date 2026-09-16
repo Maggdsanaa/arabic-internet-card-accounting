@@ -45,8 +45,9 @@ jobs:
           rm cmdline-tools.zip
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "build-tools;36.1.0"
           ln -s "$ANDROID_HOME/cmdline-tools/latest/bin" "$ANDROID_HOME/bin"
+          ln -s "$ANDROID_HOME/cmdline-tools/latest/lib" "$ANDROID_HOME/lib"
 
           cd "$GITHUB_WORKSPACE"
           npm install -g @bubblewrap/cli
