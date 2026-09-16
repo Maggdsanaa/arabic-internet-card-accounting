@@ -1,2 +1,15 @@
 #!/bin/sh
-exec gradle "$@"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
+DIST_URL="https://services.gradle.org/distributions/gradle-8.6-bin.zip"
+DIST_ZIP="$GRADLE_USER_HOME/wrapper/dists/gradle-8.6-bin/gradle-8.6-bin.zip"
+DIST_DIR="$GRADLE_USER_HOME/wrapper/dists/gradle-8.6-bin"
+
+if [ ! -f "$DIST_DIR/gradle-8.6/bin/gradle" ]; then
+  mkdir -p "$DIST_DIR"
+  echo "Downloading Gradle 8.6..."
+  curl -fsSL -o "$DIST_ZIP" "$DIST_URL"
+  cd "$DIST_DIR" && unzip -q "$DIST_ZIP" && rm "$DIST_ZIP"
+fi
+
+exec "$DIST_DIR/gradle-8.6/bin/gradle" "$@"
